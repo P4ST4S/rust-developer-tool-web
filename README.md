@@ -63,6 +63,19 @@ Built with:
 
 ---
 
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/map.svg" width="24" height="24" style="vertical-align: middle"/> Roadmap
+
+- [ ] **Log Filtering**: Filter logs by level (Info, Warn, Error) or source (Frontend/Backend).
+- [ ] **Git Operations Tab**: A dedicated tab for common git workflows.
+- [ ] **Branch Management**:
+  - [ ] Create new branches.
+  - [ ] Checkout existing branches.
+- [ ] **Quick Pull**: One-click pull for main branches (`dev`, `staging`, `main`).
+- [ ] **Commit Interface**: Button to stage and commit changes with a message input.
+- [ ] **Push Button**: Sync your local changes to the remote repository.
+
+---
+
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/play.svg" width="24" height="24" style="vertical-align: middle"/> Getting Started
 
 ### Prerequisites
