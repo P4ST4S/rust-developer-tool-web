@@ -9,6 +9,12 @@
 
 ---
 
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/image.svg" width="24" height="24" style="vertical-align: middle"/> Preview
+
+![Dev Launcher Screenshot](./assets/screenshot.png)
+
+---
+
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/sparkles.svg" width="24" height="24" style="vertical-align: middle"/> Features
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/gamepad-2.svg" width="20" height="20" style="vertical-align: middle"/> Unified Control Center
