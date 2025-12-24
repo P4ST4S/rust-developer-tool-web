@@ -4,7 +4,7 @@
 ![Egui](https://img.shields.io/badge/egui-35495E?style=for-the-badge)
 ![Tokio](https://img.shields.io/badge/tokio-000000?style=for-the-badge&logo=rust&logoColor=white)
 
-> **The ultimate developer companion for the DataKeen stack.**
+> **The ultimate developer companion for the Datakeen stack.**
 > Stop juggling multiple terminal windows. Manage your full-stack environment from a single, beautiful native interface.
 
 ---
