@@ -1,4 +1,4 @@
-# 🚀 Dev Stack Launcher
+# <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/rocket.svg" width="30" height="30" style="vertical-align: middle"/> Dev Stack Launcher
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
 ![Egui](https://img.shields.io/badge/egui-35495E?style=for-the-badge)
@@ -9,13 +9,13 @@
 
 ---
 
-## ✨ Features
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/sparkles.svg" width="24" height="24" style="vertical-align: middle"/> Features
 
-### 🎮 Unified Control Center
+### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/gamepad-2.svg" width="20" height="20" style="vertical-align: middle"/> Unified Control Center
 
 Start, stop, and restart your **Frontend** (Vite) and **Backend** services independently with a single click. No more `Ctrl+C` confusion.
 
-### 🎨 Rich Visual Terminal
+### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/terminal.svg" width="20" height="20" style="vertical-align: middle"/> Rich Visual Terminal
 
 Integrated log viewer with **full ANSI color support**.
 
@@ -24,21 +24,21 @@ Integrated log viewer with **full ANSI color support**.
 - Auto-scroll
 - Clear separation between system, frontend, and backend logs
 
-### 🧠 Smart Integration
+### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/brain-circuit.svg" width="20" height="20" style="vertical-align: middle"/> Smart Integration
 
 - **Auto-Discovery**: Automatically detects running ports and magic links (e.g., from Vite).
 - **One-Click Open**: Launch your browser directly to the correct local URL.
 - **Graceful Shutdown**: Handles process groups correctly (`SIGTERM`/`SIGKILL`) ensuring no zombie processes are left behind.
 
-### 🌓 Beautiful UI
+### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/palette.svg" width="20" height="20" style="vertical-align: middle"/> Beautiful UI
 
 - Built with **egui** for high-performance native rendering.
-- **Dark/Light Mode** support (defaulting to Dark 🌙).
+- **Dark/Light Mode** support (defaulting to Dark <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/moon.svg" width="14" height="14" style="vertical-align: middle"/>).
 - Clean, modern aesthetics.
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg" width="24" height="24" style="vertical-align: middle"/> Architecture & Tech Stack
 
 Refactored in 2025 to follow modern Rust best practices, the codebase is modular and robust:
 
@@ -57,7 +57,7 @@ Built with:
 
 ---
 
-## 🚀 Getting Started
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/play.svg" width="24" height="24" style="vertical-align: middle"/> Getting Started
 
 ### Prerequisites
 
@@ -79,7 +79,7 @@ cargo build --release
 
 ---
 
-## 🔧 Troubleshooting
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/wrench.svg" width="24" height="24" style="vertical-align: middle"/> Troubleshooting
 
 **"Port already in use"**
 The tool attempts to gracefully kill process groups. If a process persists, check:
