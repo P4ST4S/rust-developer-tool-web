@@ -30,10 +30,29 @@ pub struct DevLauncher {
     dark_mode: bool,
     filter_source: LogSource,
     filter_level: LogLevel,
+    search_query: String,
+    current_search_match: usize,
 }
 
 impl DevLauncher {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Load custom font with better Unicode support
+        let mut fonts = egui::FontDefinitions::default();
+        
+        // Load Noto Sans Mono for better Unicode support
+        fonts.font_data.insert(
+            "noto_sans_mono".to_owned(),
+            Arc::new(egui::FontData::from_static(include_bytes!("../NotoSansMono-Regular.ttf"))),
+        );
+        
+        // Set as the primary monospace font
+        fonts
+            .families
+            .get_mut(&egui::FontFamily::Monospace)
+            .unwrap()
+            .insert(0, "noto_sans_mono".to_owned());
+        
+        cc.egui_ctx.set_fonts(fonts);
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         
         Self {
@@ -44,6 +63,8 @@ impl DevLauncher {
             dark_mode: true,
             filter_source: LogSource::All,
             filter_level: LogLevel::All,
+            search_query: String::new(),
+            current_search_match: 0,
         }
     }
 
@@ -105,7 +126,7 @@ impl DevLauncher {
             if let Some(stdout) = child.stdout.take() {
                 let logs_clone = Arc::clone(&logs);
                 let url_clone = Arc::clone(&frontend_url);
-                let ansi_regex = Regex::new(r"\x1b\[([0-9;]+)m").unwrap();
+                let ansi_regex = Regex::new(r"\x1b\[([0-9;]*[A-Za-z])").unwrap();
                 tokio::spawn(async move {
                     let reader = BufReader::new(stdout);
                     let mut lines = reader.lines();
@@ -133,7 +154,7 @@ impl DevLauncher {
             if let Some(stderr) = child.stderr.take() {
                 let logs_clone = Arc::clone(&logs);
                 let url_clone = Arc::clone(&frontend_url);
-                let ansi_regex = Regex::new(r"\x1b\[([0-9;]+)m").unwrap();
+                let ansi_regex = Regex::new(r"\x1b\[([0-9;]*[A-Za-z])").unwrap();
                 tokio::spawn(async move {
                     let reader = BufReader::new(stderr);
                     let mut lines = reader.lines();
@@ -237,7 +258,7 @@ impl DevLauncher {
             
             if let Some(stdout) = child.stdout.take() {
                 let logs_clone = Arc::clone(&logs);
-                let ansi_regex = Regex::new(r"\x1b\[([0-9;]+)m").unwrap();
+                let ansi_regex = Regex::new(r"\x1b\[([0-9;]*[A-Za-z])").unwrap();
                 tokio::spawn(async move {
                     let reader = BufReader::new(stdout);
                     let mut lines = reader.lines();
@@ -252,7 +273,7 @@ impl DevLauncher {
 
             if let Some(stderr) = child.stderr.take() {
                 let logs_clone = Arc::clone(&logs);
-                let ansi_regex = Regex::new(r"\x1b\[([0-9;]+)m").unwrap();
+                let ansi_regex = Regex::new(r"\x1b\[([0-9;]*[A-Za-z])").unwrap();
                 tokio::spawn(async move {
                     let reader = BufReader::new(stderr);
                     let mut lines = reader.lines();
@@ -460,7 +481,15 @@ impl DevLauncher {
         // Check level filter
         let level_match = self.filter_level == LogLevel::All || self.filter_level == level;
         
-        source_match && level_match
+        // Check search query
+        let search_match = if self.search_query.is_empty() {
+            true
+        } else {
+            let query_lower = self.search_query.to_lowercase();
+            log_line.segments.iter().any(|seg| seg.text.to_lowercase().contains(&query_lower))
+        };
+        
+        source_match && level_match && search_match
     }
 
 
@@ -579,22 +608,173 @@ impl eframe::App for DevLauncher {
             
             ui.separator();
             
+            // Search section with match counter and navigation
+            ui.horizontal(|ui| {
+                ui.label("🔎 Recherche:");
+                let search_changed = ui.text_edit_singleline(&mut self.search_query).changed();
+                
+                // Reset match index if search changed
+                if search_changed {
+                    self.current_search_match = 0;
+                }
+                
+                // Count matches
+                let match_count = if !self.search_query.is_empty() {
+                    if let Ok(logs) = self.logs.try_lock() {
+                        let query_lower = self.search_query.to_lowercase();
+                        logs.iter()
+                            .filter(|log_line| self.should_display_log(log_line))
+                            .map(|log_line| {
+                                log_line.segments.iter()
+                                    .map(|seg| {
+                                        let text_lower = seg.text.to_lowercase();
+                                        let mut count = 0;
+                                        let mut start = 0;
+                                        while let Some(pos) = text_lower[start..].find(&query_lower) {
+                                            count += 1;
+                                            start += pos + query_lower.len();
+                                        }
+                                        count
+                                    })
+                                    .sum::<usize>()
+                            })
+                            .sum()
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+                
+                // Navigation buttons with ASCII arrows
+                if match_count > 0 {
+                    ui.label(format!("{}/{}", self.current_search_match + 1, match_count));
+                    
+                    if ui.button("  ^  ").on_hover_text("Match précédent").clicked() {
+                        self.current_search_match = if self.current_search_match == 0 {
+                            match_count - 1
+                        } else {
+                            self.current_search_match - 1
+                        };
+                    }
+                    
+                    if ui.button("  v  ").on_hover_text("Match suivant").clicked() {
+                        self.current_search_match = (self.current_search_match + 1) % match_count;
+                    }
+                }
+                
+                if ui.button("❌").on_hover_text("Effacer la recherche").clicked() {
+                    self.search_query.clear();
+                    self.current_search_match = 0;
+                }
+                
+                // Copy visible logs button
+                if ui.button("📋").on_hover_text("Copier les logs visibles").clicked() {
+                    if let Ok(logs) = self.logs.try_lock() {
+                        let mut text = String::new();
+                        for log_line in logs.iter() {
+                            if !self.should_display_log(log_line) {
+                                continue;
+                            }
+                            for segment in &log_line.segments {
+                                text.push_str(&segment.text);
+                            }
+                            text.push('\n');
+                        }
+                        ctx.copy_text(text);
+                    }
+                }
+            });
+            
+            ui.separator();
+            
+            // Display logs with color, word wrap, search highlighting (scroll enabled, no text selection)
+            let mut scroll_to_match = false;
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .stick_to_bottom(true)
                 .show(ui, |ui| {
                     ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                    
+                    let query_lower = self.search_query.to_lowercase();
+                    let has_search = !self.search_query.is_empty();
+                    let mut global_match_index = 0;
                     
                     if let Ok(logs) = self.logs.try_lock() {
                         for log_line in logs.iter() {
-                            // Apply filtering
                             if !self.should_display_log(log_line) {
                                 continue;
                             }
                             
                             ui.horizontal_wrapped(|ui| {
+                                ui.spacing_mut().item_spacing.x = 0.0;
+                                
                                 for segment in &log_line.segments {
-                                    ui.colored_label(segment.color, &segment.text);
+                                    if has_search {
+                                        // Split text by search query and highlight matches
+                                        let text_lower = segment.text.to_lowercase();
+                                        let mut last_end = 0;
+                                        let mut match_positions = Vec::new();
+                                        
+                                        // Find all match positions
+                                        let mut start = 0;
+                                        while let Some(pos) = text_lower[start..].find(&query_lower) {
+                                            let absolute_pos = start + pos;
+                                            match_positions.push(absolute_pos);
+                                            start = absolute_pos + query_lower.len();
+                                        }
+                                        
+                                        // Render text with highlights
+                                        for match_pos in match_positions {
+                                            // Text before match
+                                            if match_pos > last_end {
+                                                let before = &segment.text[last_end..match_pos];
+                                                ui.label(
+                                                    egui::RichText::new(before).color(segment.color)
+                                                );
+                                            }
+                                            
+                                            // Highlighted match
+                                            let match_end = (match_pos + self.search_query.len()).min(segment.text.len());
+                                            let matched_text = &segment.text[match_pos..match_end];
+                                            
+                                            let is_current_match = global_match_index == self.current_search_match;
+                                            let bg_color = if is_current_match {
+                                                egui::Color32::from_rgb(255, 165, 0) // Orange for current
+                                            } else {
+                                                egui::Color32::from_rgb(255, 255, 0) // Yellow for others
+                                            };
+                                            
+                                            let label_response = ui.label(
+                                                egui::RichText::new(matched_text)
+                                                    .color(egui::Color32::BLACK)
+                                                    .background_color(bg_color)
+                                            );
+                                            
+                                            // Scroll to current match
+                                            if is_current_match && !scroll_to_match {
+                                                label_response.scroll_to_me(Some(egui::Align::Center));
+                                                scroll_to_match = true;
+                                            }
+                                            
+                                            global_match_index += 1;
+                                            last_end = match_end;
+                                        }
+                                        
+                                        // Text after last match
+                                        if last_end < segment.text.len() {
+                                            let after = &segment.text[last_end..];
+                                            ui.label(
+                                                egui::RichText::new(after).color(segment.color)
+                                            );
+                                        }
+                                    } else {
+                                        // No search - just display with color
+                                        ui.label(
+                                            egui::RichText::new(&segment.text).color(segment.color)
+                                        );
+                                    }
                                 }
                             });
                         }

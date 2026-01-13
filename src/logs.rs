@@ -116,8 +116,11 @@ pub(crate) fn parse_ansi_line(ansi_regex: &Regex, text: &str, prefix: &str, dark
             }
         }
         
+        // Only update color if it's a color code (ends with 'm')
         if let Some(codes) = cap.get(1) {
-            current_color = ansi_code_to_color(codes.as_str(), dark_mode);
+            if cap.get(0).unwrap().as_str().ends_with('m') {
+                current_color = ansi_code_to_color(codes.as_str(), dark_mode);
+            }
         }
         
         last_end = match_end;
