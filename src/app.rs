@@ -434,24 +434,34 @@ impl DevLauncher {
     }
 
     fn cleanup_processes(&self) {
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            let mut frontend_guard = self.frontend_handle.blocking_lock();
+        // Try to kill frontend
+        if let Ok(mut frontend_guard) = self.frontend_handle.try_lock() {
             if let Some(mut child) = frontend_guard.child.take() {
-                handle.block_on(async {
-                    let _ = process::kill_process_group(&mut child).await;
-                    let _ = child.wait().await;
+                // Spawn blocking task to kill process
+                std::thread::spawn(move || {
+                    if let Ok(rt) = tokio::runtime::Handle::try_current() {
+                        rt.block_on(async {
+                            let _ = process::kill_process_group(&mut child).await;
+                            let _ = child.wait().await;
+                        });
+                    }
                 });
             }
-            drop(frontend_guard);
-            
-            let mut backend_guard = self.backend_handle.blocking_lock();
+        }
+        
+        // Try to kill backend
+        if let Ok(mut backend_guard) = self.backend_handle.try_lock() {
             if let Some(mut child) = backend_guard.child.take() {
-                handle.block_on(async {
-                    let _ = process::kill_process_group(&mut child).await;
-                    let _ = child.wait().await;
+                // Spawn blocking task to kill process
+                std::thread::spawn(move || {
+                    if let Ok(rt) = tokio::runtime::Handle::try_current() {
+                        rt.block_on(async {
+                            let _ = process::kill_process_group(&mut child).await;
+                            let _ = child.wait().await;
+                        });
+                    }
                 });
             }
-            drop(backend_guard);
         }
     }
 
@@ -493,6 +503,30 @@ impl DevLauncher {
     }
 
 
+}
+
+// Helper function to adjust color brightness for light mode
+fn adjust_color_for_theme(color: egui::Color32, dark_mode: bool) -> egui::Color32 {
+    if dark_mode {
+        // In dark mode, keep original bright colors
+        color
+    } else {
+        // In light mode, darken bright colors for better contrast on white
+        let [r, g, b, a] = color.to_array();
+        
+        // If it's a bright color (high RGB values), darken it
+        if r > 150 || g > 150 || b > 150 {
+            egui::Color32::from_rgba_premultiplied(
+                (r as f32 * 0.4) as u8,
+                (g as f32 * 0.4) as u8,
+                (b as f32 * 0.4) as u8,
+                a
+            )
+        } else {
+            // Already dark enough
+            color
+        }
+    }
 }
 
 impl eframe::App for DevLauncher {
@@ -711,6 +745,9 @@ impl eframe::App for DevLauncher {
                                 ui.spacing_mut().item_spacing.x = 0.0;
                                 
                                 for segment in &log_line.segments {
+                                    // Adjust color based on current theme
+                                    let adjusted_color = adjust_color_for_theme(segment.color, self.dark_mode);
+                                    
                                     if has_search {
                                         // Split text by search query and highlight matches
                                         let text_lower = segment.text.to_lowercase();
@@ -731,7 +768,7 @@ impl eframe::App for DevLauncher {
                                             if match_pos > last_end {
                                                 let before = &segment.text[last_end..match_pos];
                                                 ui.label(
-                                                    egui::RichText::new(before).color(segment.color)
+                                                    egui::RichText::new(before).color(adjusted_color)
                                                 );
                                             }
                                             
@@ -766,13 +803,13 @@ impl eframe::App for DevLauncher {
                                         if last_end < segment.text.len() {
                                             let after = &segment.text[last_end..];
                                             ui.label(
-                                                egui::RichText::new(after).color(segment.color)
+                                                egui::RichText::new(after).color(adjusted_color)
                                             );
                                         }
                                     } else {
-                                        // No search - just display with color
+                                        // No search - just display with adjusted color
                                         ui.label(
-                                            egui::RichText::new(&segment.text).color(segment.color)
+                                            egui::RichText::new(&segment.text).color(adjusted_color)
                                         );
                                     }
                                 }
