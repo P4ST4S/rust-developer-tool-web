@@ -434,34 +434,66 @@ impl DevLauncher {
     }
 
     fn cleanup_processes(&self) {
-        // Try to kill frontend
+        use std::process::Command;
+        
+        // Kill frontend synchronously
         if let Ok(mut frontend_guard) = self.frontend_handle.try_lock() {
-            if let Some(mut child) = frontend_guard.child.take() {
-                // Spawn blocking task to kill process
-                std::thread::spawn(move || {
-                    if let Ok(rt) = tokio::runtime::Handle::try_current() {
-                        rt.block_on(async {
-                            let _ = process::kill_process_group(&mut child).await;
-                            let _ = child.wait().await;
-                        });
-                    }
-                });
+            if let Some(child) = frontend_guard.child.as_ref() {
+                let pid = child.id().expect("Failed to get PID");
+                
+                #[cfg(unix)]
+                {
+                    // Kill the entire process group
+                    let _ = Command::new("kill")
+                        .args(&["-TERM", &format!("-{}", pid)])
+                        .output();
+                    
+                    // Give it a moment to terminate gracefully
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    
+                    // Force kill if still alive
+                    let _ = Command::new("kill")
+                        .args(&["-KILL", &format!("-{}", pid)])
+                        .output();
+                }
+                
+                #[cfg(windows)]
+                {
+                    let _ = Command::new("taskkill")
+                        .args(&["/F", "/T", "/PID", &pid.to_string()])
+                        .output();
+                }
             }
+            frontend_guard.child = None;
         }
         
-        // Try to kill backend
+        // Kill backend synchronously
         if let Ok(mut backend_guard) = self.backend_handle.try_lock() {
-            if let Some(mut child) = backend_guard.child.take() {
-                // Spawn blocking task to kill process
-                std::thread::spawn(move || {
-                    if let Ok(rt) = tokio::runtime::Handle::try_current() {
-                        rt.block_on(async {
-                            let _ = process::kill_process_group(&mut child).await;
-                            let _ = child.wait().await;
-                        });
-                    }
-                });
+            if let Some(child) = backend_guard.child.as_ref() {
+                let pid = child.id().expect("Failed to get PID");
+                
+                #[cfg(unix)]
+                {
+                    // Kill the entire process group
+                    let _ = Command::new("kill")
+                        .args(&["-TERM", &format!("-{}", pid)])
+                        .output();
+                    
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    
+                    let _ = Command::new("kill")
+                        .args(&["-KILL", &format!("-{}", pid)])
+                        .output();
+                }
+                
+                #[cfg(windows)]
+                {
+                    let _ = Command::new("taskkill")
+                        .args(&["/F", "/T", "/PID", &pid.to_string()])
+                        .output();
+                }
             }
+            backend_guard.child = None;
         }
     }
 
