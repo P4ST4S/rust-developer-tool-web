@@ -23,11 +23,19 @@ Start, stop, and restart your **Frontend** (Vite) and **Backend** services indep
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/terminal.svg" width="20" height="20" style="vertical-align: middle"/> Rich Visual Terminal
 
-Integrated log viewer with **full ANSI color support**.
+Integrated log viewer with **full ANSI color support** and advanced filtering capabilities.
 
-- Real-time streaming logs
-- Error highlighting
-- Auto-scroll
+- **Real-time streaming** logs with Unicode font support (Noto Sans Mono)
+- **Smart filtering**: Filter by source (Frontend/Backend/System) and level (Normal/Error)
+- **Advanced search** (VSCode-style):
+  - Case-insensitive text search with highlighting
+  - Match counter (X/Y occurrences)
+  - Navigate between matches with ▲▼ buttons
+  - Auto-scroll to current match
+- **Error highlighting** with distinct colors
+- **Auto-scroll** to keep up with new logs
+- **Copy to clipboard** for filtered logs
+- **Word wrap** for long lines
 - Clear separation between system, frontend, and backend logs
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/brain-circuit.svg" width="20" height="20" style="vertical-align: middle"/> Smart Integration
@@ -39,7 +47,7 @@ Integrated log viewer with **full ANSI color support**.
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/palette.svg" width="20" height="20" style="vertical-align: middle"/> Beautiful UI
 
 - Built with **egui** for high-performance native rendering.
-- **Dark/Light Mode** support (defaulting to Dark <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/moon.svg" width="14" height="14" style="vertical-align: middle"/>).
+- **Dark/Light Mode** support with adaptive colors (defaulting to Dark <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/moon.svg" width="14" height="14" style="vertical-align: middle"/>).
 - Clean, modern aesthetics.
 
 ---
@@ -65,7 +73,8 @@ Built with:
 
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/map.svg" width="24" height="24" style="vertical-align: middle"/> Roadmap
 
-- [ ] **Log Filtering**: Filter logs by level (Info, Warn, Error) or source (Frontend/Backend).
+- [x] **Log Filtering**: ✅ Filter logs by level (Normal/Error) and source (Frontend/Backend/System)
+- [x] **Advanced Search**: ✅ VSCode-style search with highlighting and navigation
 - [ ] **Git Operations Tab**: A dedicated tab for common git workflows.
 - [ ] **Branch Management**:
   - [ ] Create new branches.
