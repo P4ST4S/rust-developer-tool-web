@@ -11,7 +11,7 @@
 
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/image.svg" width="24" height="24" style="vertical-align: middle"/> Preview
 
-![Dev Launcher Screenshot](./assets/screenshot2.png)
+![Dev Launcher Screenshot](./assets/preview.gif)
 
 ---
 
