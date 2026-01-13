@@ -7,12 +7,29 @@ use tokio::sync::Mutex;
 use crate::logs::{self, ColoredText, LogLine};
 use crate::process::{self, ProcessHandle};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogSource {
+    All,
+    Frontend,
+    Backend,
+    System,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogLevel {
+    All,
+    Normal,
+    Error,
+}
+
 pub struct DevLauncher {
     logs: Arc<Mutex<Vec<LogLine>>>,
     frontend_handle: Arc<Mutex<ProcessHandle>>,
     backend_handle: Arc<Mutex<ProcessHandle>>,
     frontend_url: Arc<Mutex<Option<String>>>,
     dark_mode: bool,
+    filter_source: LogSource,
+    filter_level: LogLevel,
 }
 
 impl DevLauncher {
@@ -25,6 +42,8 @@ impl DevLauncher {
             backend_handle: Arc::new(Mutex::new(ProcessHandle::default())),
             frontend_url: Arc::new(Mutex::new(None)),
             dark_mode: true,
+            filter_source: LogSource::All,
+            filter_level: LogLevel::All,
         }
     }
 
@@ -415,6 +434,35 @@ impl DevLauncher {
         }
     }
 
+    fn should_display_log(&self, log_line: &LogLine) -> bool {
+        // Determine log source and level from first segment
+        let first_text = log_line.segments.first().map(|s| s.text.as_str()).unwrap_or("");
+        
+        let (source, level) = if first_text.contains("[FRONTEND ERROR]") {
+            (LogSource::Frontend, LogLevel::Error)
+        } else if first_text.contains("[FRONTEND]") {
+            (LogSource::Frontend, LogLevel::Normal)
+        } else if first_text.contains("[BACKEND ERROR]") {
+            (LogSource::Backend, LogLevel::Error)
+        } else if first_text.contains("[BACKEND]") {
+            (LogSource::Backend, LogLevel::Normal)
+        } else if first_text.contains("[ERROR]") {
+            (LogSource::System, LogLevel::Error)
+        } else if first_text.contains("[SYSTEM]") {
+            (LogSource::System, LogLevel::Normal)
+        } else {
+            (LogSource::System, LogLevel::Normal)
+        };
+        
+        // Check source filter
+        let source_match = self.filter_source == LogSource::All || self.filter_source == source;
+        
+        // Check level filter
+        let level_match = self.filter_level == LogLevel::All || self.filter_level == level;
+        
+        source_match && level_match
+    }
+
 
 }
 
@@ -497,6 +545,40 @@ impl eframe::App for DevLauncher {
             
             ui.separator();
             
+            // Filter section
+            ui.horizontal(|ui| {
+                ui.label("🔍 Filtres:");
+                
+                ui.separator();
+                ui.label("Source:");
+                if ui.selectable_label(self.filter_source == LogSource::All, "Tous").clicked() {
+                    self.filter_source = LogSource::All;
+                }
+                if ui.selectable_label(self.filter_source == LogSource::Frontend, "Frontend").clicked() {
+                    self.filter_source = LogSource::Frontend;
+                }
+                if ui.selectable_label(self.filter_source == LogSource::Backend, "Backend").clicked() {
+                    self.filter_source = LogSource::Backend;
+                }
+                if ui.selectable_label(self.filter_source == LogSource::System, "System").clicked() {
+                    self.filter_source = LogSource::System;
+                }
+                
+                ui.separator();
+                ui.label("Niveau:");
+                if ui.selectable_label(self.filter_level == LogLevel::All, "Tous").clicked() {
+                    self.filter_level = LogLevel::All;
+                }
+                if ui.selectable_label(self.filter_level == LogLevel::Normal, "Normal").clicked() {
+                    self.filter_level = LogLevel::Normal;
+                }
+                if ui.selectable_label(self.filter_level == LogLevel::Error, "Error").clicked() {
+                    self.filter_level = LogLevel::Error;
+                }
+            });
+            
+            ui.separator();
+            
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .stick_to_bottom(true)
@@ -505,6 +587,11 @@ impl eframe::App for DevLauncher {
                     
                     if let Ok(logs) = self.logs.try_lock() {
                         for log_line in logs.iter() {
+                            // Apply filtering
+                            if !self.should_display_log(log_line) {
+                                continue;
+                            }
+                            
                             ui.horizontal_wrapped(|ui| {
                                 for segment in &log_line.segments {
                                     ui.colored_label(segment.color, &segment.text);
