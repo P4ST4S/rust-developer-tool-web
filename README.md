@@ -20,7 +20,7 @@
 
 | Windows | macOS |
 | :--- | :--- |
-| [![Windows](https://img.shields.io/badge/Download-Windows-blue?logo=windows)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-black?logo=apple)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_universal.dmg) |
+| [![Windows](https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_universal.dmg) |
 
 > **Note**: Binaries are automatically built via GitHub Actions for each release.
 
