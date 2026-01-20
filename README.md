@@ -16,6 +16,16 @@
 
 ---
 
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/download.svg" width="24" height="24" style="vertical-align: middle"/> Download
+
+| Windows | macOS |
+| :--- | :--- |
+| [![Windows](https://img.shields.io/badge/Download-Windows-blue?logo=windows)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-black?logo=apple)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_universal.dmg) |
+
+> **Note**: Binaries are automatically built via GitHub Actions for each release.
+
+---
+
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/sparkles.svg" width="24" height="24" style="vertical-align: middle"/> Features
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/gamepad-2.svg" width="20" height="20" style="vertical-align: middle"/> Unified Control Center
