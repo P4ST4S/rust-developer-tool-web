@@ -38,8 +38,11 @@ jobs:
         with:
           version: 10 # Standard version in 2026
 
-      - name: Install frontend dependencies
+      - name: Install root dependencies
         run: pnpm install
+
+      - name: Install UI dependencies
+        run: pnpm --dir ui install
 
       # Official Action updated for Tauri 2.0
       - name: Build and Publish
