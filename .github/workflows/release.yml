@@ -1,0 +1,56 @@
+name: "Automatic Release 2026"
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Include macos-latest (which is now on Apple Silicon chips by default in 2026)
+        # and windows-latest
+        platform: [macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Setup Node.js v22 (current LTS in 2026)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Setup Rust stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Specific target to allow cross-compilation if needed
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10 # Standard version in 2026
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      # Official Action updated for Tauri 2.0
+      - name: Build and Publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "Release v__VERSION__"
+          releaseBody: "Automatic build via GitHub Actions."
+          releaseDraft: true
+          prerelease: false
+          # Tauri 2.0 often uses different build arguments
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
