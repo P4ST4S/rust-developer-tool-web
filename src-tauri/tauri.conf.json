@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "identifier": "com.datakeen.devlauncher",
+  "identifier": "com.p4st4s.devlauncher",
   "productName": "Dev Stack Launcher",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "build": {
     "beforeBuildCommand": "pnpm --dir ui build",
     "beforeDevCommand": "pnpm --dir ui dev",
