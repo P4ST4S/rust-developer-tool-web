@@ -87,13 +87,6 @@ export function useLogStream(
     };
   }, [terminalRef, shouldDisplayLog]);
 
-  // Clear logs when project changes
-  useEffect(() => {
-    logsRef.current = [];
-    setLogs([]);
-    terminalRef.current?.clear();
-  }, [projectId, terminalRef]);
-
   const clearLogs = useCallback(() => {
     logsRef.current = [];
     setLogs([]);

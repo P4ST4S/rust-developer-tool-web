@@ -13,9 +13,6 @@ function App() {
     addProject,
     updateProject,
     deleteProject,
-    addService,
-    updateService,
-    deleteService,
   } = useConfig();
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -75,12 +72,18 @@ function App() {
           </button>
         </div>
       )}
-      <ProjectView
-        key={currentProject.id}
-        project={currentProject}
-        theme={theme}
-        onThemeToggle={toggleTheme}
-      />
+      {config.projects.map((project) => (
+        <div
+          key={project.id}
+          style={{ display: project.id === currentProjectId ? 'flex' : 'none', flex: 1, flexDirection: 'column' }}
+        >
+          <ProjectView
+            project={project}
+            theme={theme}
+            onThemeToggle={toggleTheme}
+          />
+        </div>
+      ))}
       {showConfigModal && (
         <ConfigModal
           config={config}
@@ -88,9 +91,6 @@ function App() {
           onAddProject={addProject}
           onUpdateProject={updateProject}
           onDeleteProject={deleteProject}
-          onAddService={addService}
-          onUpdateService={updateService}
-          onDeleteService={deleteService}
         />
       )}
     </div>
