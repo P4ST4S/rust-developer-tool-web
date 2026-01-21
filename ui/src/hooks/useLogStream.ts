@@ -129,15 +129,21 @@ export function useLogStream(
     const appendLogs = (incomingLogs: LogEvent[]) => {
       if (!incomingLogs.length) return;
 
+      const batchParts: string[] = [];
+
       for (const newLog of incomingLogs) {
         if (newLog.project_id !== projectIdRef.current) {
           continue;
         }
 
         pushLog(logBufferRef.current, newLog);
-        if (shouldDisplayLog(newLog) && terminalRef.current) {
-          terminalRef.current.writeln(newLog.text);
+        if (shouldDisplayLog(newLog)) {
+          batchParts.push(`${newLog.text}\r\n`);
         }
+      }
+
+      if (batchParts.length && terminalRef.current) {
+        terminalRef.current.write(batchParts.join(''));
       }
     };
 
