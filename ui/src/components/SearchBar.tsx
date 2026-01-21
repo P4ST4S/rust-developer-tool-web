@@ -64,7 +64,9 @@ export function SearchBar({ onSearch, onNext, onPrev }: SearchBarProps) {
         title="Previous (Shift+Enter)"
         className="search-btn"
       >
-        ^
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
       </button>
       <button
         onClick={onNext}
@@ -72,7 +74,9 @@ export function SearchBar({ onSearch, onNext, onPrev }: SearchBarProps) {
         title="Next (Enter)"
         className="search-btn"
       >
-        v
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
       </button>
       <button
         onClick={handleClear}
@@ -80,7 +84,10 @@ export function SearchBar({ onSearch, onNext, onPrev }: SearchBarProps) {
         title="Clear (Esc)"
         className="search-btn"
       >
-        x
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
       </button>
     </div>
   );
