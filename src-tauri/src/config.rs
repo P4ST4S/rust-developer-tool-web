@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -53,19 +54,29 @@ pub fn load_config() -> Option<Config> {
     serde_json::from_str(&content).ok()
 }
 
-pub fn save_config(config: &Config) -> Result<(), String> {
-    let dir = get_config_dir().ok_or("Could not determine config directory")?;
-    let path = get_config_path().ok_or("Could not determine config path")?;
+pub fn save_config(config: &Config) -> Result<(), AppError> {
+    let dir = get_config_dir().ok_or_else(|| AppError::SaveConfig {
+        message: "Could not determine config directory".to_string(),
+    })?;
+    let path = get_config_path().ok_or_else(|| AppError::SaveConfig {
+        message: "Could not determine config path".to_string(),
+    })?;
 
     // Create directory if it doesn't exist
     if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {}", e))?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| AppError::SaveConfig { message: e.to_string() })?;
     }
 
-    let content =
-        serde_json::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let content = serde_json::to_string_pretty(config)
+        .map_err(|e| AppError::SaveConfig { message: e.to_string() })?;
 
-    fs::write(&path, content).map_err(|e| format!("Failed to write config: {}", e))?;
+    let tmp_path = path.with_extension("json.tmp");
+    fs::write(&tmp_path, content)
+        .map_err(|e| AppError::SaveConfig { message: e.to_string() })?;
+
+    fs::rename(&tmp_path, &path)
+        .map_err(|e| AppError::SaveConfig { message: e.to_string() })?;
 
     Ok(())
 }

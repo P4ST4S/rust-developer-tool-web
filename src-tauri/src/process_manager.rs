@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::error::AppError;
 use crate::events::{LogEvent, ManagerEvent, ServiceStatus, StatusEvent};
 use crate::process::{create_process_group_command, kill_process_group};
 use regex::Regex;
@@ -29,6 +29,15 @@ pub struct ProcessManager {
     vite_url_regex: Regex,
 }
 
+pub struct ServiceSpec {
+    pub project_id: String,
+    pub service_id: String,
+    pub name: String,
+    pub path: String,
+    pub command: String,
+    pub detect_url: bool,
+}
+
 impl ProcessManager {
     pub fn new(event_tx: mpsc::Sender<ManagerEvent>) -> Self {
         let vite_url_regex =
@@ -45,28 +54,32 @@ impl ProcessManager {
 
     pub async fn start_service(
         &self,
-        config: &Config,
-        project_id: String,
-        service_id: String,
-    ) -> Result<(), String> {
+        spec: ServiceSpec,
+    ) -> Result<(), AppError> {
+        let ServiceSpec {
+            project_id,
+            service_id,
+            name,
+            path,
+            command,
+            detect_url,
+        } = spec;
         let composite_id = format!("{}:{}", project_id, service_id);
 
         {
             let processes = self.processes.lock().await;
             if let Some(process) = processes.get(&composite_id) {
                 if process.running {
-                    return Err(format!("Service {} already running", service_id));
+                    return Err(AppError::ServiceAlreadyRunning {
+                        service_id,
+                    });
                 }
             }
         }
 
-        let service = config
-            .get_service(&project_id, &service_id)
-            .ok_or_else(|| format!("Service {} not found", service_id))?;
-        let service_name = service.name.clone();
-        let service_path = service.path.clone();
-        let service_command = service.command.clone();
-        let detect_url = service.detect_url;
+        let service_name = name;
+        let service_path = path;
+        let service_command = command;
 
         self.emit_log(LogEvent {
             source: "system".to_string(),
@@ -82,12 +95,13 @@ impl ProcessManager {
 
         let parts: Vec<&str> = service_command.split_whitespace().collect();
         if parts.is_empty() {
-            return Err("Empty command".to_string());
+            return Err(AppError::EmptyCommand);
         }
         let program = parts[0];
         let args: Vec<&str> = parts[1..].to_vec();
 
         let mut cmd = create_process_group_command(program, &args, &service_path);
+        let service_name_for_error = service_name.clone();
         let mut child = cmd.spawn().map_err(|e| {
             self.emit_log(LogEvent {
                 source: "system".to_string(),
@@ -95,13 +109,16 @@ impl ProcessManager {
                 text: format!(
                     "{}Failed to start {}: {}",
                     format_log_prefix("system", true),
-                    service_name,
+                    service_name_for_error,
                     e
                 ),
                 timestamp: get_timestamp(),
                 project_id: project_id.clone(),
             });
-            e.to_string()
+            AppError::ProcessStartFailed {
+                service_name: service_name_for_error,
+                message: e.to_string(),
+            }
         })?;
 
         let child_id = child.id();
@@ -242,14 +259,14 @@ impl ProcessManager {
                                     level: "normal".to_string(),
                                     text: format!(
                                         "{}{} stopped (PID: {:?}, status: {:?})",
-                                        format_log_prefix("system", false),
-                                        service_name_clone,
-                                        child_id,
-                                        status
-                                    ),
-                                    timestamp: get_timestamp(),
-                                    project_id: project_id_clone.clone(),
-                                }));
+                                    format_log_prefix("system", false),
+                                    service_name_clone,
+                                    child_id,
+                                    status
+                                ),
+                                timestamp: get_timestamp(),
+                                project_id: project_id_clone.clone(),
+                            }));
                                 process.child = None;
                                 process.running = false;
 
@@ -268,13 +285,13 @@ impl ProcessManager {
                                     level: "error".to_string(),
                                     text: format!(
                                         "{}Error checking {} status: {}",
-                                        format_log_prefix("system", true),
-                                        service_name_clone,
-                                        e
-                                    ),
-                                    timestamp: get_timestamp(),
-                                    project_id: project_id_clone.clone(),
-                                }));
+                                    format_log_prefix("system", true),
+                                    service_name_clone,
+                                    e
+                                ),
+                                timestamp: get_timestamp(),
+                                project_id: project_id_clone.clone(),
+                            }));
                                 process.child = None;
                                 process.running = false;
                                 break;
@@ -294,15 +311,11 @@ impl ProcessManager {
 
     pub async fn stop_service(
         &self,
-        config: Option<&Config>,
         project_id: String,
         service_id: String,
-    ) -> Result<(), String> {
+        service_name: String,
+    ) -> Result<(), AppError> {
         let composite_id = format!("{}:{}", project_id, service_id);
-        let service_name = config
-            .and_then(|cfg| cfg.get_service(&project_id, &service_id))
-            .map(|service| service.name.clone())
-            .unwrap_or_else(|| service_id.clone());
 
         let mut processes = self.processes.lock().await;
         if let Some(process) = processes.get_mut(&composite_id) {

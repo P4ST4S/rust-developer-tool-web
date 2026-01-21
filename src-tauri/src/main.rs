@@ -3,6 +3,7 @@
 mod commands;
 mod config;
 mod events;
+mod error;
 mod process;
 mod process_manager;
 mod state;
