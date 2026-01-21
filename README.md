@@ -3,9 +3,9 @@
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
 ![Tauri](https://img.shields.io/badge/tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Version](https://img.shields.io/badge/version-2.0.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.1.0-blue?style=for-the-badge)
 
-> **The ultimate developer companion for the Datakeen stack — V2.0.0**
+> **The ultimate developer companion for the Datakeen stack — V2.1.0**
 > Stop juggling multiple terminal windows. Manage your full-stack environment from a single, beautiful native interface powered by Tauri + xterm.js.
 
 ---
@@ -20,7 +20,7 @@
 
 | Windows | macOS |
 | :--- | :--- |
-| [![Windows](https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.0.0/Dev.Stack.Launcher_2.0.0_universal.dmg) |
+| [![Windows](https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.1.0/Dev.Stack.Launcher_2.1.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.1.0/Dev.Stack.Launcher_2.1.0_universal.dmg) |
 
 > **Note**: Binaries are automatically built via GitHub Actions for each release.
 
@@ -30,7 +30,7 @@
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/gamepad-2.svg" width="20" height="20" style="vertical-align: middle"/> Unified Control Center
 
-Start, stop, and restart your **Frontend** (Vite) and **Backend** services independently with a single click. No more `Ctrl+C` confusion.
+Start, stop, and restart your **services** per project with a single click. No more `Ctrl+C` confusion.
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/terminal.svg" width="20" height="20" style="vertical-align: middle"/> Professional Terminal Experience
 
@@ -41,18 +41,18 @@ Powered by **xterm.js** (same engine as VS Code), providing a native terminal ex
   - ✅ Perfect ANSI color rendering (no manual parsing needed)
   - ✅ System-native copy/paste
   - ✅ Clickable URLs and file paths
-- **Smart filtering**: Filter by source (Frontend/Backend/System) and level (Normal/Error)
+- **Smart filtering**: Filter by project, source (Service/System), and level (Normal/Error)
 - **Advanced search** (xterm.js native):
   - Incremental search with highlighting
   - Navigate matches with shortcuts
   - Case-sensitive/insensitive options
-- **Performance**: Handle 100k+ lines smoothly with virtual scrolling
+- **Performance**: Handle up to 20,000 lines smoothly with virtual scrolling
 - **Word wrap**: Automatic line wrapping for long entries
 - **Scrollback**: Configurable history (default: 10,000 lines)
 
 ### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/brain-circuit.svg" width="20" height="20" style="vertical-align: middle"/> Smart Integration
 
-- **Auto-Discovery**: Automatically detects running ports and Vite dev server URLs
+- **Auto-Discovery**: Detects per-service URLs (Vite dev servers supported)
 - **One-Click Open**: Launch your browser directly to the correct local URL
 - **Graceful Shutdown**: Handles process groups correctly (`SIGTERM`/`SIGKILL`) ensuring no zombie processes
 
@@ -60,6 +60,7 @@ Powered by **xterm.js** (same engine as VS Code), providing a native terminal ex
 
 - Built with **Tauri 2** for native performance with web flexibility
 - **Dark/Light Mode** support with xterm.js themes
+- Multi-project tabs and persistent configuration
 - Clean, modern aesthetics
 - Native window controls and system integration
 
@@ -67,7 +68,7 @@ Powered by **xterm.js** (same engine as VS Code), providing a native terminal ex
 
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg" width="24" height="24" style="vertical-align: middle"/> Architecture & Tech Stack
 
-### V2.0.0 - Hybrid Architecture (Tauri)
+### V2.1.0 - Hybrid Architecture (Tauri)
 
 ```
 ┌─────────────────────────────────────┐
@@ -107,28 +108,22 @@ Powered by **xterm.js** (same engine as VS Code), providing a native terminal ex
 
 ---
 
-## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/zap.svg" width="24" height="24" style="vertical-align: middle"/> What's New in V2.0.0
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/zap.svg" width="24" height="24" style="vertical-align: middle"/> What's New in V2.1.0
 
-### 🔄 Complete Rewrite
+### Major Changes
+- Added persistent project/service configuration (stored in `~/.dev-stack-launcher/config.json`)
+- Introduced per-service control (start/stop/open) with status and URL detection
+- Added a welcome screen and a project management modal (add/edit/delete)
 
-- ✅ Migrated from **egui** to **Tauri + xterm.js**
-- ✅ Replaced custom log rendering with professional terminal emulator
-- ✅ Native text selection with auto-scroll (finally!)
-- ✅ Better ANSI color support (terminal-native)
-- ✅ Improved performance for large log volumes
-- ✅ Professional terminal UX (same as VS Code)
+### Improvements
+- Project tabs now keep views mounted for faster switching
+- Search bar uses SVG icons instead of text-based arrows (^, v, x)
+- Filters and log streams are isolated per project
 
-### 🎯 Key Improvements
-
-| Feature | V1 (egui) | V2 (Tauri) |
-|---------|-----------|------------|
-| Text Selection | ❌ No auto-scroll | ✅ Native auto-scroll |
-| ANSI Colors | Manual parsing | ✅ Terminal native |
-| Large logs (100k lines) | Laggy | ✅ Smooth (virtual scroll) |
-| Copy/Paste | Manual | ✅ System native |
-| Clickable URLs | No | ✅ Yes |
-| Bundle size | 3MB | 5MB |
-| Memory | 30MB | 100MB |
+### Fixes
+- Terminal content no longer clears when switching project tabs
+- Removed TypeScript warnings in `ConfigModal.tsx` and `ProjectView.tsx`
+- Cleaned Rust warnings (unused imports and dead code)
 
 ---
 
@@ -179,19 +174,24 @@ pnpm run build
 rust-gui/
 ├── ui/                    # Frontend (TypeScript)
 │   ├── index.html        # Entry point
-│   ├── main.ts           # Application logic
-│   ├── terminal.ts       # xterm.js integration
-│   └── styles.css        # Styling
+│   └── src/
+│       ├── App.tsx       # App shell
+│       ├── main.tsx      # Bootstrapping
+│       ├── components/   # UI components
+│       ├── hooks/        # State + IPC hooks
+│       ├── styles/       # Styling
+│       └── types/        # Shared types
 ├── src-tauri/            # Backend (Rust)
 │   ├── src/
 │   │   ├── main.rs      # Tauri app entry
 │   │   ├── commands.rs  # IPC commands
+│   │   ├── config.rs    # App config persistence
 │   │   ├── process.rs   # Process management
-│   │   └── logs.rs      # Log utilities
+│   │   └── state.rs     # App state
 │   ├── Cargo.toml
 │   └── tauri.conf.json  # Tauri configuration
 ├── package.json
-└── MIGRATION.md         # Migration guide from V1
+└── CHANGELOG.md
 ```
 
 ---
