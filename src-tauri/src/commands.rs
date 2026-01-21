@@ -1,21 +1,12 @@
+use crate::config::{save_config, Config};
 use crate::process::{create_process_group_command, kill_process_group};
-use crate::state::AppState;
+use crate::state::{AppState, ProcessState};
 use regex::Regex;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::collections::HashMap;
+
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
-
-fn get_project_root(_app: &AppHandle) -> PathBuf {
-    // CARGO_MANIFEST_DIR is set during compilation to src-tauri directory
-    // We go up 2 levels: src-tauri -> rust-gui -> datakeen-refacto
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    PathBuf::from(manifest_dir)
-        .parent() // rust-gui
-        .and_then(|p| p.parent()) // datakeen-refacto
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("/Users/antoinerospars/projects/datakeen-refacto"))
-}
 
 #[derive(Clone, Serialize)]
 pub struct LogEvent {
@@ -23,13 +14,18 @@ pub struct LogEvent {
     pub level: String,
     pub text: String,
     pub timestamp: String,
+    pub project_id: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct ServiceStatus {
+    pub running: bool,
+    pub url: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
 pub struct StatusEvent {
-    pub frontend_running: bool,
-    pub backend_running: bool,
-    pub frontend_url: Option<String>,
+    pub services: HashMap<String, ServiceStatus>,
 }
 
 fn extract_vite_url(line: &str) -> Option<String> {
@@ -41,13 +37,13 @@ fn extract_vite_url(line: &str) -> Option<String> {
 }
 
 fn format_log_prefix(source: &str, is_error: bool) -> String {
-    let color_code = match (source, is_error) {
-        ("frontend", false) => "\x1b[38;5;75m",
-        ("frontend", true) => "\x1b[38;5;196m",
-        ("backend", false) => "\x1b[38;5;114m",
-        ("backend", true) => "\x1b[38;5;196m",
-        ("system", _) => "\x1b[38;5;214m",
-        _ => "\x1b[0m",
+    let color_code = if is_error {
+        "\x1b[38;5;196m"
+    } else {
+        match source.to_lowercase().as_str() {
+            "system" => "\x1b[38;5;214m",
+            _ => "\x1b[38;5;75m",
+        }
     };
     let reset = "\x1b[0m";
     let label = if is_error {
@@ -63,44 +59,109 @@ fn get_timestamp() -> String {
 }
 
 async fn emit_status(app: &AppHandle, state: &AppState) {
-    let frontend = state.frontend.lock().await;
-    let backend = state.backend.lock().await;
-    let url = state.frontend_url.lock().await;
+    let processes = state.processes.lock().await;
+    let urls = state.detected_urls.lock().await;
 
-    let _ = app.emit(
-        "status-change",
-        StatusEvent {
-            frontend_running: frontend.running,
-            backend_running: backend.running,
-            frontend_url: url.clone(),
-        },
-    );
+    let mut services = HashMap::new();
+    for (service_id, process) in processes.iter() {
+        services.insert(
+            service_id.clone(),
+            ServiceStatus {
+                running: process.running,
+                url: urls.get(service_id).cloned(),
+            },
+        );
+    }
+
+    let _ = app.emit("status-change", StatusEvent { services });
+}
+
+// Config commands
+#[tauri::command]
+pub async fn get_config(state: State<'_, AppState>) -> Result<Option<Config>, String> {
+    let config = state.config.lock().await;
+    Ok(config.clone())
 }
 
 #[tauri::command]
-pub async fn start_frontend(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn save_app_config(
+    config: Config,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    save_config(&config)?;
+    let mut state_config = state.config.lock().await;
+    *state_config = Some(config);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_active_project(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().await;
+    if let Some(ref mut cfg) = *config {
+        cfg.active_project = Some(project_id);
+        save_config(cfg)?;
+    }
+    Ok(())
+}
+
+// Service commands
+#[tauri::command]
+pub async fn start_service(
+    project_id: String,
+    service_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let composite_id = format!("{}:{}", project_id, service_id);
+
+    // Check if already running
     {
-        let frontend = state.frontend.lock().await;
-        if frontend.running {
-            return Err("Frontend already running".to_string());
+        let processes = state.processes.lock().await;
+        if let Some(process) = processes.get(&composite_id) {
+            if process.running {
+                return Err(format!("Service {} already running", service_id));
+            }
         }
     }
+
+    // Get service config
+    let (service_name, service_path, service_command, detect_url) = {
+        let config = state.config.lock().await;
+        let cfg = config.as_ref().ok_or("No config loaded")?;
+        let service = cfg
+            .get_service(&project_id, &service_id)
+            .ok_or(format!("Service {} not found", service_id))?;
+        (
+            service.name.clone(),
+            service.path.clone(),
+            service.command.clone(),
+            service.detect_url,
+        )
+    };
 
     let _ = app.emit(
         "log",
         LogEvent {
             source: "system".to_string(),
             level: "normal".to_string(),
-            text: format!("{}Starting frontend...", format_log_prefix("system", false)),
+            text: format!("{}Starting {}...", format_log_prefix("system", false), service_name),
             timestamp: get_timestamp(),
+            project_id: project_id.clone(),
         },
     );
 
-    let project_root = get_project_root(&app);
-    let frontend_dir = project_root.join("frontend");
-    let frontend_dir_str = frontend_dir.to_string_lossy().to_string();
+    // Parse command
+    let parts: Vec<&str> = service_command.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("Empty command".to_string());
+    }
+    let program = parts[0];
+    let args: Vec<&str> = parts[1..].to_vec();
 
-    let mut cmd = create_process_group_command("pnpm", &["dev"], &frontend_dir_str);
+    let mut cmd = create_process_group_command(program, &args, &service_path);
     let mut child = cmd.spawn().map_err(|e| {
         let _ = app.emit(
             "log",
@@ -108,155 +169,201 @@ pub async fn start_frontend(app: AppHandle, state: State<'_, AppState>) -> Resul
                 source: "system".to_string(),
                 level: "error".to_string(),
                 text: format!(
-                    "{}Failed to start frontend: {}",
+                    "{}Failed to start {}: {}",
                     format_log_prefix("system", true),
+                    service_name,
                     e
                 ),
                 timestamp: get_timestamp(),
+                project_id: project_id.clone(),
             },
         );
         e.to_string()
     })?;
 
     let child_id = child.id();
+    let composite_id_clone = composite_id.clone();
+    let project_id_clone = project_id.clone();
+    let service_name_clone = service_name.clone();
 
+    // Handle stdout
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
-        let url_state = state.frontend_url.clone();
+        let urls_state = state.detected_urls.clone();
+        let composite_id_stdout = composite_id.clone();
+        let project_id_stdout = project_id.clone();
+        let service_name_stdout = service_name.clone();
+        let detect_url_stdout = detect_url;
         tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
 
             while let Ok(Some(line)) = lines.next_line().await {
-                if let Some(url) = extract_vite_url(&line) {
-                    let mut url_guard = url_state.lock().await;
-                    *url_guard = Some(url.clone());
-                    let _ = app_clone.emit("frontend-url", url.clone());
-                    let _ = app_clone.emit(
-                        "log",
-                        LogEvent {
-                            source: "system".to_string(),
-                            level: "normal".to_string(),
-                            text: format!(
-                                "{}Frontend URL detected: {}",
-                                format_log_prefix("system", false),
-                                url
-                            ),
-                            timestamp: get_timestamp(),
-                        },
-                    );
-                }
-
-                let _ = app_clone.emit(
-                    "log",
-                    LogEvent {
-                        source: "frontend".to_string(),
-                        level: "normal".to_string(),
-                        text: format!("{}{}", format_log_prefix("frontend", false), line),
-                        timestamp: get_timestamp(),
-                    },
-                );
-            }
-        });
-    }
-
-    if let Some(stderr) = child.stderr.take() {
-        let app_clone = app.clone();
-        let url_state = state.frontend_url.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-
-            while let Ok(Some(line)) = lines.next_line().await {
-                if let Some(url) = extract_vite_url(&line) {
-                    let mut url_guard = url_state.lock().await;
-                    *url_guard = Some(url.clone());
-                    let _ = app_clone.emit("frontend-url", url.clone());
-                }
-
-                let _ = app_clone.emit(
-                    "log",
-                    LogEvent {
-                        source: "frontend".to_string(),
-                        level: "error".to_string(),
-                        text: format!("{}{}", format_log_prefix("frontend", true), line),
-                        timestamp: get_timestamp(),
-                    },
-                );
-            }
-        });
-    }
-
-    {
-        let mut frontend = state.frontend.lock().await;
-        frontend.child = Some(child);
-        frontend.running = true;
-    }
-
-    emit_status(&app, &state).await;
-
-    let app_monitor = app.clone();
-    let frontend_state = state.frontend.clone();
-    let url_state = state.frontend_url.clone();
-    let backend_state = state.backend.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-            let mut guard = frontend_state.lock().await;
-            if let Some(child) = &mut guard.child {
-                match child.try_wait() {
-                    Ok(Some(status)) => {
-                        let _ = app_monitor.emit(
+                if detect_url_stdout {
+                    if let Some(url) = extract_vite_url(&line) {
+                        let mut urls = urls_state.lock().await;
+                        urls.insert(composite_id_stdout.clone(), url.clone());
+                        let _ = app_clone.emit("service-url", serde_json::json!({
+                            "serviceId": composite_id_stdout.clone(),
+                            "url": url.clone()
+                        }));
+                        let _ = app_clone.emit(
                             "log",
                             LogEvent {
                                 source: "system".to_string(),
                                 level: "normal".to_string(),
                                 text: format!(
-                                    "{}Frontend stopped (PID: {:?}, status: {:?})",
+                                    "{}{} URL detected: {}",
                                     format_log_prefix("system", false),
-                                    child_id,
-                                    status
+                                    service_name_stdout,
+                                    url
                                 ),
                                 timestamp: get_timestamp(),
+                                project_id: project_id_stdout.clone(),
                             },
                         );
-                        guard.child = None;
-                        guard.running = false;
-
-                        let mut url = url_state.lock().await;
-                        *url = None;
-
-                        let backend = backend_state.lock().await;
-                        let _ = app_monitor.emit(
-                            "status-change",
-                            StatusEvent {
-                                frontend_running: false,
-                                backend_running: backend.running,
-                                frontend_url: None,
-                            },
-                        );
-                        break;
                     }
-                    Ok(None) => {}
-                    Err(e) => {
-                        let _ = app_monitor.emit(
-                            "log",
-                            LogEvent {
-                                source: "system".to_string(),
-                                level: "error".to_string(),
-                                text: format!(
-                                    "{}Error checking frontend status: {}",
-                                    format_log_prefix("system", true),
-                                    e
-                                ),
-                                timestamp: get_timestamp(),
-                            },
-                        );
-                        guard.child = None;
-                        guard.running = false;
-                        break;
+                }
+
+                let _ = app_clone.emit(
+                    "log",
+                    LogEvent {
+                        source: service_name_stdout.to_lowercase(),
+                        level: "normal".to_string(),
+                        text: format!("{}{}", format_log_prefix(&service_name_stdout, false), line),
+                        timestamp: get_timestamp(),
+                        project_id: project_id_stdout.clone(),
+                    },
+                );
+            }
+        });
+    }
+
+    // Handle stderr
+    if let Some(stderr) = child.stderr.take() {
+        let app_clone = app.clone();
+        let urls_state = state.detected_urls.clone();
+        let composite_id_stderr = composite_id.clone();
+        let project_id_stderr = project_id.clone();
+        let service_name_stderr = service_name.clone();
+        let detect_url_stderr = detect_url;
+        tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+
+            while let Ok(Some(line)) = lines.next_line().await {
+                if detect_url_stderr {
+                    if let Some(url) = extract_vite_url(&line) {
+                        let mut urls = urls_state.lock().await;
+                        urls.insert(composite_id_stderr.clone(), url.clone());
+                        let _ = app_clone.emit("service-url", serde_json::json!({
+                            "serviceId": composite_id_stderr.clone(),
+                            "url": url
+                        }));
                     }
+                }
+
+                let _ = app_clone.emit(
+                    "log",
+                    LogEvent {
+                        source: service_name_stderr.to_lowercase(),
+                        level: "error".to_string(),
+                        text: format!("{}{}", format_log_prefix(&service_name_stderr, true), line),
+                        timestamp: get_timestamp(),
+                        project_id: project_id_stderr.clone(),
+                    },
+                );
+            }
+        });
+    }
+
+    // Store process
+    {
+        let mut processes = state.processes.lock().await;
+        processes.insert(
+            composite_id.clone(),
+            ProcessState {
+                child: Some(child),
+                running: true,
+            },
+        );
+    }
+
+    emit_status(&app, &state).await;
+
+    // Monitor process
+    let app_monitor = app.clone();
+    let processes_state = state.processes.clone();
+    let urls_state = state.detected_urls.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+            let mut processes = processes_state.lock().await;
+            if let Some(process) = processes.get_mut(&composite_id_clone) {
+                if let Some(child) = &mut process.child {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            let _ = app_monitor.emit(
+                                "log",
+                                LogEvent {
+                                    source: "system".to_string(),
+                                    level: "normal".to_string(),
+                                    text: format!(
+                                        "{}{} stopped (PID: {:?}, status: {:?})",
+                                        format_log_prefix("system", false),
+                                        service_name_clone,
+                                        child_id,
+                                        status
+                                    ),
+                                    timestamp: get_timestamp(),
+                                    project_id: project_id_clone.clone(),
+                                },
+                            );
+                            process.child = None;
+                            process.running = false;
+
+                            let mut urls = urls_state.lock().await;
+                            urls.remove(&composite_id_clone);
+
+                            // Emit status update
+                            let mut services = HashMap::new();
+                            for (id, p) in processes.iter() {
+                                services.insert(
+                                    id.clone(),
+                                    ServiceStatus {
+                                        running: p.running,
+                                        url: urls.get(id).cloned(),
+                                    },
+                                );
+                            }
+                            let _ = app_monitor.emit("status-change", StatusEvent { services });
+                            break;
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            let _ = app_monitor.emit(
+                                "log",
+                                LogEvent {
+                                    source: "system".to_string(),
+                                    level: "error".to_string(),
+                                    text: format!(
+                                        "{}Error checking {} status: {}",
+                                        format_log_prefix("system", true),
+                                        service_name_clone,
+                                        e
+                                    ),
+                                    timestamp: get_timestamp(),
+                                    project_id: project_id_clone.clone(),
+                                },
+                            );
+                            process.child = None;
+                            process.running = false;
+                            break;
+                        }
+                    }
+                } else {
+                    break;
                 }
             } else {
                 break;
@@ -268,273 +375,78 @@ pub async fn start_frontend(app: AppHandle, state: State<'_, AppState>) -> Resul
 }
 
 #[tauri::command]
-pub async fn stop_frontend(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let mut guard = state.frontend.lock().await;
-    if let Some(mut child) = guard.child.take() {
-        guard.running = false;
-        drop(guard);
+pub async fn stop_service(
+    project_id: String,
+    service_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let composite_id = format!("{}:{}", project_id, service_id);
 
-        let _ = app.emit(
-            "log",
-            LogEvent {
-                source: "system".to_string(),
-                level: "normal".to_string(),
-                text: format!("{}Stopping frontend...", format_log_prefix("system", false)),
-                timestamp: get_timestamp(),
-            },
-        );
+    // Get service name for logging
+    let service_name = {
+        let config = state.config.lock().await;
+        config
+            .as_ref()
+            .and_then(|cfg| cfg.get_service(&project_id, &service_id))
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| service_id.clone())
+    };
 
-        match kill_process_group(&mut child).await {
-            Ok(_) => match child.wait().await {
-                Ok(status) => {
-                    let _ = app.emit(
-                        "log",
-                        LogEvent {
-                            source: "system".to_string(),
-                            level: "normal".to_string(),
-                            text: format!(
-                                "{}Frontend killed successfully (status: {:?})",
-                                format_log_prefix("system", false),
-                                status
-                            ),
-                            timestamp: get_timestamp(),
-                        },
-                    );
-                }
-                Err(e) => {
-                    let _ = app.emit(
-                        "log",
-                        LogEvent {
-                            source: "system".to_string(),
-                            level: "error".to_string(),
-                            text: format!(
-                                "{}Error waiting for frontend: {}",
-                                format_log_prefix("system", true),
-                                e
-                            ),
-                            timestamp: get_timestamp(),
-                        },
-                    );
-                }
-            },
-            Err(e) => {
-                let _ = app.emit(
-                    "log",
-                    LogEvent {
-                        source: "system".to_string(),
-                        level: "error".to_string(),
-                        text: format!(
-                            "{}Failed to kill frontend: {}",
-                            format_log_prefix("system", true),
-                            e
-                        ),
-                        timestamp: get_timestamp(),
-                    },
-                );
-            }
-        }
+    let mut processes = state.processes.lock().await;
+    if let Some(process) = processes.get_mut(&composite_id) {
+        if let Some(mut child) = process.child.take() {
+            process.running = false;
+            drop(processes);
 
-        let mut url = state.frontend_url.lock().await;
-        *url = None;
-    }
+            let _ = app.emit(
+                "log",
+                LogEvent {
+                    source: "system".to_string(),
+                    level: "normal".to_string(),
+                    text: format!("{}Stopping {}...", format_log_prefix("system", false), service_name),
+                    timestamp: get_timestamp(),
+                    project_id: project_id.clone(),
+                },
+            );
 
-    emit_status(&app, &state).await;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn start_backend(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    {
-        let backend = state.backend.lock().await;
-        if backend.running {
-            return Err("Backend already running".to_string());
-        }
-    }
-
-    let _ = app.emit(
-        "log",
-        LogEvent {
-            source: "system".to_string(),
-            level: "normal".to_string(),
-            text: format!("{}Starting backend...", format_log_prefix("system", false)),
-            timestamp: get_timestamp(),
-        },
-    );
-
-    let backend_dir = get_project_root(&app).join("backend");
-    let backend_dir_str = backend_dir.to_string_lossy().to_string();
-    let mut cmd = create_process_group_command("pnpm", &["start:dev"], &backend_dir_str);
-    let mut child = cmd.spawn().map_err(|e| {
-        let _ = app.emit(
-            "log",
-            LogEvent {
-                source: "system".to_string(),
-                level: "error".to_string(),
-                text: format!(
-                    "{}Failed to start backend: {}",
-                    format_log_prefix("system", true),
-                    e
-                ),
-                timestamp: get_timestamp(),
-            },
-        );
-        e.to_string()
-    })?;
-
-    let child_id = child.id();
-
-    if let Some(stdout) = child.stdout.take() {
-        let app_clone = app.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_clone.emit(
-                    "log",
-                    LogEvent {
-                        source: "backend".to_string(),
-                        level: "normal".to_string(),
-                        text: format!("{}{}", format_log_prefix("backend", false), line),
-                        timestamp: get_timestamp(),
-                    },
-                );
-            }
-        });
-    }
-
-    if let Some(stderr) = child.stderr.take() {
-        let app_clone = app.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_clone.emit(
-                    "log",
-                    LogEvent {
-                        source: "backend".to_string(),
-                        level: "error".to_string(),
-                        text: format!("{}{}", format_log_prefix("backend", true), line),
-                        timestamp: get_timestamp(),
-                    },
-                );
-            }
-        });
-    }
-
-    {
-        let mut backend = state.backend.lock().await;
-        backend.child = Some(child);
-        backend.running = true;
-    }
-
-    emit_status(&app, &state).await;
-
-    let app_monitor = app.clone();
-    let backend_state = state.backend.clone();
-    let frontend_state = state.frontend.clone();
-    let url_state = state.frontend_url.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-            let mut guard = backend_state.lock().await;
-            if let Some(child) = &mut guard.child {
-                match child.try_wait() {
-                    Ok(Some(status)) => {
-                        let _ = app_monitor.emit(
+            match kill_process_group(&mut child).await {
+                Ok(_) => match child.wait().await {
+                    Ok(status) => {
+                        let _ = app.emit(
                             "log",
                             LogEvent {
                                 source: "system".to_string(),
                                 level: "normal".to_string(),
                                 text: format!(
-                                    "{}Backend stopped (PID: {:?}, status: {:?})",
+                                    "{}{} killed successfully (status: {:?})",
                                     format_log_prefix("system", false),
-                                    child_id,
+                                    service_name,
                                     status
                                 ),
                                 timestamp: get_timestamp(),
+                                project_id: project_id.clone(),
                             },
                         );
-                        guard.child = None;
-                        guard.running = false;
-
-                        let frontend = frontend_state.lock().await;
-                        let url = url_state.lock().await;
-                        let _ = app_monitor.emit(
-                            "status-change",
-                            StatusEvent {
-                                frontend_running: frontend.running,
-                                backend_running: false,
-                                frontend_url: url.clone(),
-                            },
-                        );
-                        break;
                     }
-                    Ok(None) => {}
                     Err(e) => {
-                        let _ = app_monitor.emit(
+                        let _ = app.emit(
                             "log",
                             LogEvent {
                                 source: "system".to_string(),
                                 level: "error".to_string(),
                                 text: format!(
-                                    "{}Error checking backend status: {}",
+                                    "{}Error waiting for {}: {}",
                                     format_log_prefix("system", true),
+                                    service_name,
                                     e
                                 ),
                                 timestamp: get_timestamp(),
+                                project_id: project_id.clone(),
                             },
                         );
-                        guard.child = None;
-                        guard.running = false;
-                        break;
                     }
-                }
-            } else {
-                break;
-            }
-        }
-    });
-
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn stop_backend(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let mut guard = state.backend.lock().await;
-    if let Some(mut child) = guard.child.take() {
-        guard.running = false;
-        drop(guard);
-
-        let _ = app.emit(
-            "log",
-            LogEvent {
-                source: "system".to_string(),
-                level: "normal".to_string(),
-                text: format!("{}Stopping backend...", format_log_prefix("system", false)),
-                timestamp: get_timestamp(),
-            },
-        );
-
-        match kill_process_group(&mut child).await {
-            Ok(_) => match child.wait().await {
-                Ok(status) => {
-                    let _ = app.emit(
-                        "log",
-                        LogEvent {
-                            source: "system".to_string(),
-                            level: "normal".to_string(),
-                            text: format!(
-                                "{}Backend killed successfully (status: {:?})",
-                                format_log_prefix("system", false),
-                                status
-                            ),
-                            timestamp: get_timestamp(),
-                        },
-                    );
-                }
+                },
                 Err(e) => {
                     let _ = app.emit(
                         "log",
@@ -542,30 +454,20 @@ pub async fn stop_backend(app: AppHandle, state: State<'_, AppState>) -> Result<
                             source: "system".to_string(),
                             level: "error".to_string(),
                             text: format!(
-                                "{}Error waiting for backend: {}",
+                                "{}Failed to kill {}: {}",
                                 format_log_prefix("system", true),
+                                service_name,
                                 e
                             ),
                             timestamp: get_timestamp(),
+                            project_id: project_id.clone(),
                         },
                     );
                 }
-            },
-            Err(e) => {
-                let _ = app.emit(
-                    "log",
-                    LogEvent {
-                        source: "system".to_string(),
-                        level: "error".to_string(),
-                        text: format!(
-                            "{}Failed to kill backend: {}",
-                            format_log_prefix("system", true),
-                            e
-                        ),
-                        timestamp: get_timestamp(),
-                    },
-                );
             }
+
+            let mut urls = state.detected_urls.lock().await;
+            urls.remove(&composite_id);
         }
     }
 
@@ -575,15 +477,21 @@ pub async fn stop_backend(app: AppHandle, state: State<'_, AppState>) -> Result<
 
 #[tauri::command]
 pub async fn get_status(state: State<'_, AppState>) -> Result<StatusEvent, String> {
-    let frontend = state.frontend.lock().await;
-    let backend = state.backend.lock().await;
-    let url = state.frontend_url.lock().await;
+    let processes = state.processes.lock().await;
+    let urls = state.detected_urls.lock().await;
 
-    Ok(StatusEvent {
-        frontend_running: frontend.running,
-        backend_running: backend.running,
-        frontend_url: url.clone(),
-    })
+    let mut services = HashMap::new();
+    for (service_id, process) in processes.iter() {
+        services.insert(
+            service_id.clone(),
+            ServiceStatus {
+                running: process.running,
+                url: urls.get(service_id).cloned(),
+            },
+        );
+    }
+
+    Ok(StatusEvent { services })
 }
 
 #[tauri::command]

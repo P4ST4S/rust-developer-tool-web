@@ -1,3 +1,5 @@
+use crate::config::Config;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::process::Child;
 use tokio::sync::Mutex;
@@ -17,17 +19,17 @@ impl Default for ProcessState {
 }
 
 pub struct AppState {
-    pub frontend: Arc<Mutex<ProcessState>>,
-    pub backend: Arc<Mutex<ProcessState>>,
-    pub frontend_url: Arc<Mutex<Option<String>>>,
+    pub config: Arc<Mutex<Option<Config>>>,
+    pub processes: Arc<Mutex<HashMap<String, ProcessState>>>,
+    pub detected_urls: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            frontend: Arc::new(Mutex::new(ProcessState::default())),
-            backend: Arc::new(Mutex::new(ProcessState::default())),
-            frontend_url: Arc::new(Mutex::new(None)),
+            config: Arc::new(Mutex::new(None)),
+            processes: Arc::new(Mutex::new(HashMap::new())),
+            detected_urls: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

@@ -1,22 +1,35 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod config;
 mod process;
 mod state;
 
 use commands::*;
+use config::load_config;
 use state::AppState;
 use tauri::Manager;
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            // Load config at startup
+            let state = app.state::<AppState>();
+            if let Some(config) = load_config() {
+                let mut state_config = state.config.blocking_lock();
+                *state_config = Some(config);
+            }
+            Ok(())
+        })
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
-            start_frontend,
-            stop_frontend,
-            start_backend,
-            stop_backend,
+            get_config,
+            save_app_config,
+            set_active_project,
+            start_service,
+            stop_service,
             get_status,
             open_browser,
         ])
@@ -35,51 +48,27 @@ fn main() {
 fn cleanup_processes_sync(state: &AppState) {
     use std::process::Command;
 
-    // Kill frontend
-    if let Ok(frontend_guard) = state.frontend.try_lock() {
-        if let Some(child) = frontend_guard.child.as_ref() {
-            if let Some(pid) = child.id() {
-                #[cfg(unix)]
-                {
-                    let _ = Command::new("kill")
-                        .args(["-TERM", &format!("-{}", pid)])
-                        .output();
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    let _ = Command::new("kill")
-                        .args(["-KILL", &format!("-{}", pid)])
-                        .output();
-                }
+    if let Ok(processes) = state.processes.try_lock() {
+        for (_, process) in processes.iter() {
+            if let Some(child) = process.child.as_ref() {
+                if let Some(pid) = child.id() {
+                    #[cfg(unix)]
+                    {
+                        let _ = Command::new("kill")
+                            .args(["-TERM", &format!("-{}", pid)])
+                            .output();
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        let _ = Command::new("kill")
+                            .args(["-KILL", &format!("-{}", pid)])
+                            .output();
+                    }
 
-                #[cfg(windows)]
-                {
-                    let _ = Command::new("taskkill")
-                        .args(["/F", "/T", "/PID", &pid.to_string()])
-                        .output();
-                }
-            }
-        }
-    }
-
-    // Kill backend
-    if let Ok(backend_guard) = state.backend.try_lock() {
-        if let Some(child) = backend_guard.child.as_ref() {
-            if let Some(pid) = child.id() {
-                #[cfg(unix)]
-                {
-                    let _ = Command::new("kill")
-                        .args(["-TERM", &format!("-{}", pid)])
-                        .output();
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    let _ = Command::new("kill")
-                        .args(["-KILL", &format!("-{}", pid)])
-                        .output();
-                }
-
-                #[cfg(windows)]
-                {
-                    let _ = Command::new("taskkill")
-                        .args(["/F", "/T", "/PID", &pid.to_string()])
-                        .output();
+                    #[cfg(windows)]
+                    {
+                        let _ = Command::new("taskkill")
+                            .args(["/F", "/T", "/PID", &pid.to_string()])
+                            .output();
+                    }
                 }
             }
         }
