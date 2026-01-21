@@ -3,9 +3,9 @@
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
 ![Tauri](https://img.shields.io/badge/tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Version](https://img.shields.io/badge/version-2.1.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.2.0-blue?style=for-the-badge)
 
-> **The ultimate developer companion for the Datakeen stack — V2.1.0**
+> **The ultimate developer companion for the Datakeen stack — V2.2.0**
 > Stop juggling multiple terminal windows. Manage your full-stack environment from a single, beautiful native interface powered by Tauri + xterm.js.
 
 ---
@@ -20,7 +20,7 @@
 
 | Windows | macOS |
 | :--- | :--- |
-| [![Windows](https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.1.0/Dev.Stack.Launcher_2.1.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.1.0/Dev.Stack.Launcher_2.1.0_universal.dmg) |
+| [![Windows](https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.2.0/Dev.Stack.Launcher_2.2.0_x64-setup.exe) | [![macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/P4ST4S/rust-developer-tool-web/releases/download/v2.2.0/Dev.Stack.Launcher_2.2.0_universal.dmg) |
 
 > **Note**: Binaries are automatically built via GitHub Actions for each release.
 
@@ -68,7 +68,7 @@ Powered by **xterm.js** (same engine as VS Code), providing a native terminal ex
 
 ## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg" width="24" height="24" style="vertical-align: middle"/> Architecture & Tech Stack
 
-### V2.1.0 - Hybrid Architecture (Tauri)
+### V2.2.0 - Hybrid Architecture (Tauri)
 
 ```
 ┌─────────────────────────────────────┐
@@ -108,22 +108,20 @@ Powered by **xterm.js** (same engine as VS Code), providing a native terminal ex
 
 ---
 
-## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/zap.svg" width="24" height="24" style="vertical-align: middle"/> What's New in V2.1.0
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/zap.svg" width="24" height="24" style="vertical-align: middle"/> What's New in V2.2.0
 
 ### Major Changes
-- Added persistent project/service configuration (stored in `~/.dev-stack-launcher/config.json`)
-- Introduced per-service control (start/stop/open) with status and URL detection
-- Added a welcome screen and a project management modal (add/edit/delete)
+- Introduced a dedicated ProcessManager to decouple IPC from process lifecycle logic
+- Added batched log events (`log-batch`) with throttled IPC forwarding
+- Switched backend errors to structured `AppError` codes for richer frontend handling
 
 ### Improvements
-- Project tabs now keep views mounted for faster switching
-- Search bar uses SVG icons instead of text-based arrows (^, v, x)
-- Filters and log streams are isolated per project
+- Log streaming now uses a ring buffer with batched writes to xterm.js
+- Terminal rewrites on filter changes are chunked to avoid UI stalls
+- Config persistence now uses atomic temp-write + rename
 
 ### Fixes
-- Terminal content no longer clears when switching project tabs
-- Removed TypeScript warnings in `ConfigModal.tsx` and `ProjectView.tsx`
-- Cleaned Rust warnings (unused imports and dead code)
+- `set_active_project` now validates, persists, then commits in-memory to avoid divergence
 
 ---
 
@@ -184,10 +182,13 @@ rust-gui/
 ├── src-tauri/            # Backend (Rust)
 │   ├── src/
 │   │   ├── main.rs      # Tauri app entry
-│   │   ├── commands.rs  # IPC commands
-│   │   ├── config.rs    # App config persistence
-│   │   ├── process.rs   # Process management
-│   │   └── state.rs     # App state
+│   │   ├── commands.rs        # IPC commands
+│   │   ├── config.rs          # App config persistence
+│   │   ├── error.rs           # App error types
+│   │   ├── events.rs          # IPC event models
+│   │   ├── process.rs         # Process helpers
+│   │   ├── process_manager.rs # Process lifecycle logic
+│   │   └── state.rs           # App state
 │   ├── Cargo.toml
 │   └── tauri.conf.json  # Tauri configuration
 ├── package.json
