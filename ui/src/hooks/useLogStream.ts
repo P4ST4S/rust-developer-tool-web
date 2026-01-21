@@ -1,17 +1,56 @@
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import type { LogEvent, Filters } from '../types/events';
 import type { TerminalHandle } from '../components/Terminal';
 
 const MAX_LOGS = 20000;
+const REWRITE_CHUNK_SIZE = 500;
+
+type LogBuffer = {
+  items: LogEvent[];
+  start: number;
+  size: number;
+  capacity: number;
+};
+
+const createLogBuffer = (capacity: number): LogBuffer => ({
+  items: [],
+  start: 0,
+  size: 0,
+  capacity,
+});
+
+const pushLog = (buffer: LogBuffer, log: LogEvent) => {
+  if (buffer.size < buffer.capacity) {
+    buffer.items.push(log);
+    buffer.size += 1;
+    return;
+  }
+
+  buffer.items[buffer.start] = log;
+  buffer.start = (buffer.start + 1) % buffer.capacity;
+};
+
+const getLogAt = (buffer: LogBuffer, index: number): LogEvent | undefined => {
+  if (index < 0 || index >= buffer.size || buffer.size === 0) {
+    return undefined;
+  }
+
+  if (buffer.size < buffer.capacity) {
+    return buffer.items[index];
+  }
+
+  const itemIndex = (buffer.start + index) % buffer.capacity;
+  return buffer.items[itemIndex];
+};
 
 export function useLogStream(
   terminalRef: React.RefObject<TerminalHandle | null>,
   filters: Filters,
   projectId: string
 ) {
-  const [logs, setLogs] = useState<LogEvent[]>([]);
-  const logsRef = useRef<LogEvent[]>([]);
+  const logBufferRef = useRef<LogBuffer>(createLogBuffer(MAX_LOGS));
+  const rewriteTokenRef = useRef(0);
   const filtersRef = useRef(filters);
   const projectIdRef = useRef(projectId);
   filtersRef.current = filters;
@@ -42,11 +81,40 @@ export function useLogStream(
   const rewriteTerminal = useCallback(() => {
     if (!terminalRef.current) return;
 
+    const buffer = logBufferRef.current;
     terminalRef.current.clear();
-    const filteredLogs = logsRef.current.filter(shouldDisplayLog);
-    for (const log of filteredLogs) {
-      terminalRef.current.writeln(log.text);
-    }
+    if (buffer.size === 0) return;
+
+    const token = rewriteTokenRef.current + 1;
+    rewriteTokenRef.current = token;
+
+    let index = 0;
+    const total = buffer.size;
+
+    const writeChunk = () => {
+      if (rewriteTokenRef.current !== token) return;
+      if (!terminalRef.current) return;
+
+      let written = 0;
+      while (index < total && written < REWRITE_CHUNK_SIZE) {
+        const log = getLogAt(buffer, index);
+        if (log && shouldDisplayLog(log)) {
+          terminalRef.current.writeln(log.text);
+        }
+        index += 1;
+        written += 1;
+      }
+
+      if (index < total) {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(writeChunk);
+        } else {
+          setTimeout(writeChunk, 0);
+        }
+      }
+    };
+
+    writeChunk();
   }, [terminalRef, shouldDisplayLog]);
 
   useEffect(() => {
@@ -61,33 +129,16 @@ export function useLogStream(
     const appendLogs = (incomingLogs: LogEvent[]) => {
       if (!incomingLogs.length) return;
 
-      let didAppend = false;
-      let updatedLogs = logsRef.current;
-
       for (const newLog of incomingLogs) {
         if (newLog.project_id !== projectIdRef.current) {
           continue;
         }
 
-        if (!didAppend) {
-          updatedLogs = [...updatedLogs];
-          didAppend = true;
-        }
-
-        updatedLogs.push(newLog);
+        pushLog(logBufferRef.current, newLog);
         if (shouldDisplayLog(newLog) && terminalRef.current) {
           terminalRef.current.writeln(newLog.text);
         }
       }
-
-      if (!didAppend) return;
-
-      if (updatedLogs.length > MAX_LOGS) {
-        updatedLogs = updatedLogs.slice(-MAX_LOGS);
-      }
-
-      logsRef.current = updatedLogs;
-      setLogs([...updatedLogs]);
     };
 
     listen<LogEvent>('log', (event) => {
@@ -112,10 +163,9 @@ export function useLogStream(
   }, [terminalRef, shouldDisplayLog]);
 
   const clearLogs = useCallback(() => {
-    logsRef.current = [];
-    setLogs([]);
+    logBufferRef.current = createLogBuffer(MAX_LOGS);
     terminalRef.current?.clear();
   }, [terminalRef]);
 
-  return { logs, clearLogs };
+  return { clearLogs };
 }

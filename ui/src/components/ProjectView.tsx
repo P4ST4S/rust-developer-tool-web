@@ -20,7 +20,7 @@ export function ProjectView({ project, theme, onThemeToggle }: ProjectViewProps)
     level: 'all',
   });
 
-  const { logs: _logs, clearLogs } = useLogStream(terminalRef, filters, project.id);
+  const { clearLogs } = useLogStream(terminalRef, filters, project.id);
   const {
     startService,
     stopService,
