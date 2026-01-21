@@ -1,31 +1,24 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { TerminalHandle } from './Terminal';
 
 interface SearchBarProps {
-  terminalRef: React.RefObject<TerminalHandle | null>;
+  onSearch: (query: string) => void;
+  onNext: () => void;
+  onPrev: () => void;
 }
 
-export function SearchBar({ terminalRef }: SearchBarProps) {
+export function SearchBar({ onSearch, onNext, onPrev }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSearch = useCallback(
     (value: string) => {
       setQuery(value);
-      if (value && terminalRef.current) {
-        terminalRef.current.search(value);
+      if (value) {
+        onSearch(value);
       }
     },
-    [terminalRef]
+    [onSearch]
   );
-
-  const handleFindNext = useCallback(() => {
-    terminalRef.current?.findNext();
-  }, [terminalRef]);
-
-  const handleFindPrevious = useCallback(() => {
-    terminalRef.current?.findPrevious();
-  }, [terminalRef]);
 
   const handleClear = useCallback(() => {
     setQuery('');
@@ -40,9 +33,9 @@ export function SearchBar({ terminalRef }: SearchBarProps) {
       if (e.key === 'Enter' && document.activeElement === inputRef.current) {
         e.preventDefault();
         if (e.shiftKey) {
-          handleFindPrevious();
+          onPrev();
         } else {
-          handleFindNext();
+          onNext();
         }
       }
       if (e.key === 'Escape' && document.activeElement === inputRef.current) {
@@ -53,20 +46,20 @@ export function SearchBar({ terminalRef }: SearchBarProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleFindNext, handleFindPrevious, handleClear]);
+  }, [onNext, onPrev, handleClear]);
 
   return (
     <div className="search-bar">
       <input
         ref={inputRef}
         type="text"
-        placeholder="Search logs... (Cmd+F)"
+        placeholder="Search... (Cmd+F)"
         value={query}
         onChange={(e) => handleSearch(e.target.value)}
         className="search-input"
       />
       <button
-        onClick={handleFindPrevious}
+        onClick={onPrev}
         disabled={!query}
         title="Previous (Shift+Enter)"
         className="search-btn"
@@ -74,7 +67,7 @@ export function SearchBar({ terminalRef }: SearchBarProps) {
         ^
       </button>
       <button
-        onClick={handleFindNext}
+        onClick={onNext}
         disabled={!query}
         title="Next (Enter)"
         className="search-btn"

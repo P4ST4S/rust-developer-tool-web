@@ -7,21 +7,35 @@ const MAX_LOGS = 20000;
 
 export function useLogStream(
   terminalRef: React.RefObject<TerminalHandle | null>,
-  filters: Filters
+  filters: Filters,
+  projectId: string
 ) {
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const logsRef = useRef<LogEvent[]>([]);
   const filtersRef = useRef(filters);
+  const projectIdRef = useRef(projectId);
   filtersRef.current = filters;
+  projectIdRef.current = projectId;
 
   const shouldDisplayLog = useCallback((log: LogEvent): boolean => {
     const currentFilters = filtersRef.current;
+    const currentProjectId = projectIdRef.current;
+
+    // Filter by project
+    if (log.project_id !== currentProjectId) {
+      return false;
+    }
+
+    // Filter by source
     if (currentFilters.source !== 'all' && currentFilters.source !== log.source) {
       return false;
     }
+
+    // Filter by level
     if (currentFilters.level !== 'all' && currentFilters.level !== log.level) {
       return false;
     }
+
     return true;
   }, []);
 
@@ -48,6 +62,11 @@ export function useLogStream(
 
       const newLog = event.payload;
 
+      // Only store logs for this project
+      if (newLog.project_id !== projectIdRef.current) {
+        return;
+      }
+
       logsRef.current = [...logsRef.current, newLog];
       if (logsRef.current.length > MAX_LOGS) {
         logsRef.current = logsRef.current.slice(-MAX_LOGS);
@@ -67,6 +86,13 @@ export function useLogStream(
       unlisten?.();
     };
   }, [terminalRef, shouldDisplayLog]);
+
+  // Clear logs when project changes
+  useEffect(() => {
+    logsRef.current = [];
+    setLogs([]);
+    terminalRef.current?.clear();
+  }, [projectId, terminalRef]);
 
   const clearLogs = useCallback(() => {
     logsRef.current = [];

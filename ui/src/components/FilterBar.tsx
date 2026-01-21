@@ -1,18 +1,12 @@
-import type { Filters, LogSource, LogLevel } from '../types/events';
+import type { Filters, LogLevel } from '../types/events';
 
 interface FilterBarProps {
   filters: Filters;
-  onChange: (filters: Filters) => void;
+  onFiltersChange: (filters: Filters) => void;
+  sourceOptions: Array<{ value: string; label: string }>;
 }
 
-export function FilterBar({ filters, onChange }: FilterBarProps) {
-  const sources: { value: LogSource; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'frontend', label: 'Frontend' },
-    { value: 'backend', label: 'Backend' },
-    { value: 'system', label: 'System' },
-  ];
-
+export function FilterBar({ filters, onFiltersChange, sourceOptions }: FilterBarProps) {
   const levels: { value: LogLevel; label: string }[] = [
     { value: 'all', label: 'All' },
     { value: 'normal', label: 'Normal' },
@@ -23,11 +17,11 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
     <div className="filter-bar">
       <div className="filter-group">
         <span className="filter-label">Source:</span>
-        {sources.map(({ value, label }) => (
+        {sourceOptions.map(({ value, label }) => (
           <button
             key={value}
             className={`filter-btn ${filters.source === value ? 'active' : ''}`}
-            onClick={() => onChange({ ...filters, source: value })}
+            onClick={() => onFiltersChange({ ...filters, source: value })}
           >
             {label}
           </button>
@@ -40,7 +34,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
           <button
             key={value}
             className={`filter-btn ${filters.level === value ? 'active' : ''}`}
-            onClick={() => onChange({ ...filters, level: value })}
+            onClick={() => onFiltersChange({ ...filters, level: value })}
           >
             {label}
           </button>
