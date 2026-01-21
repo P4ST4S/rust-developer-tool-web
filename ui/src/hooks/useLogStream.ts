@@ -11,19 +11,19 @@ export function useLogStream(
 ) {
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const logsRef = useRef<LogEvent[]>([]);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
-  const shouldDisplayLog = useCallback(
-    (log: LogEvent): boolean => {
-      if (filters.source !== 'all' && filters.source !== log.source) {
-        return false;
-      }
-      if (filters.level !== 'all' && filters.level !== log.level) {
-        return false;
-      }
-      return true;
-    },
-    [filters.source, filters.level]
-  );
+  const shouldDisplayLog = useCallback((log: LogEvent): boolean => {
+    const currentFilters = filtersRef.current;
+    if (currentFilters.source !== 'all' && currentFilters.source !== log.source) {
+      return false;
+    }
+    if (currentFilters.level !== 'all' && currentFilters.level !== log.level) {
+      return false;
+    }
+    return true;
+  }, []);
 
   const rewriteTerminal = useCallback(() => {
     if (!terminalRef.current) return;
@@ -41,8 +41,11 @@ export function useLogStream(
 
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
+    let mounted = true;
 
     listen<LogEvent>('log', (event) => {
+      if (!mounted) return;
+
       const newLog = event.payload;
 
       logsRef.current = [...logsRef.current, newLog];
@@ -60,6 +63,7 @@ export function useLogStream(
     });
 
     return () => {
+      mounted = false;
       unlisten?.();
     };
   }, [terminalRef, shouldDisplayLog]);
