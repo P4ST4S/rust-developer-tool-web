@@ -1,35 +1,26 @@
 use crate::config::Config;
-use std::collections::HashMap;
+use crate::events::ManagerEvent;
+use crate::process_manager::ProcessManager;
 use std::sync::Arc;
-use tokio::process::Child;
-use tokio::sync::Mutex;
-
-pub struct ProcessState {
-    pub child: Option<Child>,
-    pub running: bool,
-}
-
-impl Default for ProcessState {
-    fn default() -> Self {
-        Self {
-            child: None,
-            running: false,
-        }
-    }
-}
+use tokio::sync::{mpsc, Mutex};
 
 pub struct AppState {
     pub config: Arc<Mutex<Option<Config>>>,
-    pub processes: Arc<Mutex<HashMap<String, ProcessState>>>,
-    pub detected_urls: Arc<Mutex<HashMap<String, String>>>,
+    pub process_manager: Arc<ProcessManager>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
+        let (event_tx, _event_rx) = mpsc::channel::<ManagerEvent>(1);
+        Self::new(event_tx)
+    }
+}
+
+impl AppState {
+    pub fn new(event_tx: mpsc::Sender<ManagerEvent>) -> Self {
         Self {
             config: Arc::new(Mutex::new(None)),
-            processes: Arc::new(Mutex::new(HashMap::new())),
-            detected_urls: Arc::new(Mutex::new(HashMap::new())),
+            process_manager: Arc::new(ProcessManager::new(event_tx)),
         }
     }
 }

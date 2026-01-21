@@ -54,36 +54,60 @@ export function useLogStream(
   }, [filters.source, filters.level, rewriteTerminal]);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
+    let unlistenLog: UnlistenFn | null = null;
+    let unlistenBatch: UnlistenFn | null = null;
     let mounted = true;
+
+    const appendLogs = (incomingLogs: LogEvent[]) => {
+      if (!incomingLogs.length) return;
+
+      let didAppend = false;
+      let updatedLogs = logsRef.current;
+
+      for (const newLog of incomingLogs) {
+        if (newLog.project_id !== projectIdRef.current) {
+          continue;
+        }
+
+        if (!didAppend) {
+          updatedLogs = [...updatedLogs];
+          didAppend = true;
+        }
+
+        updatedLogs.push(newLog);
+        if (shouldDisplayLog(newLog) && terminalRef.current) {
+          terminalRef.current.writeln(newLog.text);
+        }
+      }
+
+      if (!didAppend) return;
+
+      if (updatedLogs.length > MAX_LOGS) {
+        updatedLogs = updatedLogs.slice(-MAX_LOGS);
+      }
+
+      logsRef.current = updatedLogs;
+      setLogs([...updatedLogs]);
+    };
 
     listen<LogEvent>('log', (event) => {
       if (!mounted) return;
-
-      const newLog = event.payload;
-
-      // Only store logs for this project
-      if (newLog.project_id !== projectIdRef.current) {
-        return;
-      }
-
-      logsRef.current = [...logsRef.current, newLog];
-      if (logsRef.current.length > MAX_LOGS) {
-        logsRef.current = logsRef.current.slice(-MAX_LOGS);
-      }
-
-      setLogs([...logsRef.current]);
-
-      if (shouldDisplayLog(newLog) && terminalRef.current) {
-        terminalRef.current.writeln(newLog.text);
-      }
+      appendLogs([event.payload]);
     }).then((fn) => {
-      unlisten = fn;
+      unlistenLog = fn;
+    });
+
+    listen<LogEvent[]>('log-batch', (event) => {
+      if (!mounted) return;
+      appendLogs(event.payload);
+    }).then((fn) => {
+      unlistenBatch = fn;
     });
 
     return () => {
       mounted = false;
-      unlisten?.();
+      unlistenLog?.();
+      unlistenBatch?.();
     };
   }, [terminalRef, shouldDisplayLog]);
 
